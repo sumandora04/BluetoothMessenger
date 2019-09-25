@@ -5,6 +5,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.Manifest;
 import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothServerSocket;
 import android.bluetooth.BluetoothSocket;
@@ -30,8 +31,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+
+import static android.bluetooth.BluetoothClass.Device.PHONE_SMART;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -158,12 +162,16 @@ public class MainActivity extends AppCompatActivity {
     private void listPairedBluetoothDevices() {
         if (bluetoothAdapter != null) {
             Set<BluetoothDevice> bluetoothDeviceSet = bluetoothAdapter.getBondedDevices();
-            String[] deviceName = new String[bluetoothDeviceSet.size()];
+         //   String[] deviceName = new String[bluetoothDeviceSet.size()];
 
             int index = 0;
             for (BluetoothDevice device : bluetoothDeviceSet) {
-                deviceName[index] = device.getName();
-                newDevicesList.add(device);
+              //  deviceName[index] = device.getName();
+                BluetoothClass c = device.getBluetoothClass();
+                Log.d(TAG, "BluetoothClass: "+c.toString());
+                if (Objects.equals(device.getBluetoothClass(), PHONE_SMART)) {
+                    newDevicesList.add(device);
+                }
                 index++;
             }
 
@@ -304,8 +312,14 @@ public class MainActivity extends AppCompatActivity {
                     handler.sendMessage(message);
 
                     //Initialise the [sendReceiveThread] for server side.
-                    sendReceiveThread = new SendReceiveThread(socket);
-                    sendReceiveThread.start();
+                    if (socket.isConnected()) {
+                        sendReceiveThread = new SendReceiveThread(socket);
+                        sendReceiveThread.start();
+                    }else {
+                        Toast.makeText(MainActivity.this, "Connection closed", Toast.LENGTH_SHORT).show();
+                        message.what = STATE_CONNECTION_FAILED;
+                        handler.sendMessage(message);
+                    }
                     break;
                 }
             }
@@ -326,10 +340,12 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-
         public void run() {
             try {
-                //TODO : Cancel the discoverey of device here, before connecting.
+                //Cancel the discoverey of device here, before connecting.
+                if (bluetoothAdapter.isDiscovering()) {
+                    bluetoothAdapter.cancelDiscovery();
+                }
 
                 socket.connect();
                 Message message = Message.obtain();
@@ -337,8 +353,15 @@ public class MainActivity extends AppCompatActivity {
                 handler.sendMessage(message);
 
                 //Initialise the [sendReceiveThread] for client side.
-                sendReceiveThread = new SendReceiveThread(socket);
-                sendReceiveThread.start();
+
+                if (socket.isConnected()) {
+                    sendReceiveThread = new SendReceiveThread(socket);
+                    sendReceiveThread.start();
+                }else {
+                    Toast.makeText(MainActivity.this, "Connection closed", Toast.LENGTH_SHORT).show();
+                    message.what = STATE_CONNECTION_FAILED;
+                    handler.sendMessage(message);
+                }
 
             } catch (IOException e) {
                 e.printStackTrace();
